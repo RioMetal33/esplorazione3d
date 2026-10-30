@@ -132,39 +132,44 @@ export class Game {
     this.animate();
   }
 
-  animate() {
-    this.animationFrameId =
-      requestAnimationFrame(
-        this.animate
-      );
-
-    const deltaTime = Math.min(
-      this.clock.getDelta(),
-      0.05
+animate() {
+  this.animationFrameId =
+    requestAnimationFrame(
+      this.animate
     );
 
-    const delta = this.clock.getDelta();
-    const elapsedTime = this.clock.elapsedTime;
+  // getDelta() deve essere chiamato UNA SOLA VOLTA per frame
+  const deltaTime = Math.min(
+    this.clock.getDelta(),
+    0.05
+  );
 
-    this.player.update(deltaTime);
+  const elapsedTime =
+    this.clock.elapsedTime;
 
-    this.world.update(deltaTime);
+  // Aggiornamento giocatore
+  this.player.update(deltaTime);
 
-    this.interactionSystem.update();
+  // Aggiornamento mondo e porta
+  this.world.update(deltaTime);
 
-    this.renderer.render(
-      this.scene,
-      this.camera
-    );
+  // Aggiornamento interazioni
+  this.interactionSystem.update();
 
-    this.snowSystem.update(
-      delta,
-      elapsedTime,
-      this.camera.position
-    );
+  // Aggiornamento neve
+  this.snowSystem.update(
+    deltaTime,
+    elapsedTime,
+    this.camera.position
+  );
 
-    
-  }
+  // Rendering finale
+  this.renderer.render(
+    this.scene,
+    this.camera
+  );
+}
+
 
   handleResize() {
     const width =
