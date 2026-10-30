@@ -1,19 +1,33 @@
 import * as THREE from "three";
 import { Door } from "./Door";
+import { Planet } from "./Planet.js";
 
 export class World {
   constructor(scene) {
-    this.scene = scene;
-    this.obstacles = [];
-    this.interactableMeshes = [];
-    this.doors = [];
+  this.scene = scene;
 
-    this.createLights();
-    this.createGround();
-    this.createPath();
-    this.createBuildings();
-    this.createTrees();
-    this.createWallWithDoor();  
+  this.obstacles = [];
+  this.interactableMeshes = [];
+  this.doors = [];
+
+  // Pianeta
+  this.planet = new Planet(
+    this.scene,
+    {
+      radius: 28,
+      color: 0xf2f5f7,
+    }
+  );
+
+  this.createLights();
+
+  // Il vecchio terreno piatto non serve più
+  // this.createGround();
+
+  this.createPath();
+  this.createBuildings();
+  this.createTrees();
+  this.createWallWithDoor();
   }
 
   createLights() {
@@ -67,94 +81,216 @@ export class World {
   }
 
   createBuildings() {
-    const buildingMaterial = new THREE.MeshStandardMaterial({
+  const buildingMaterial =
+    new THREE.MeshStandardMaterial({
       color: 0xd8c2a3,
       roughness: 0.9,
     });
 
-    const roofMaterial = new THREE.MeshStandardMaterial({
+  const roofMaterial =
+    new THREE.MeshStandardMaterial({
       color: 0x8b4b3d,
       roughness: 0.9,
     });
 
-    const createBuilding = (x, z, width, height, depth) => {
-      const body = new THREE.Mesh(
-        new THREE.BoxGeometry(width, height, depth),
-        buildingMaterial
-      );
+  const createBuilding = (
+    x,
+    z,
+    width,
+    height,
+    depth
+  ) => {
+    /*
+     * Ogni edificio diventa un gruppo.
+     *
+     * Il punto (0,0,0) del gruppo rappresenta
+     * il punto in cui la casa tocca il pianeta.
+     */
+    const building = new THREE.Group();
 
-      body.position.set(x, height / 2, z);
+    // Corpo della casa
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        width,
+        height,
+        depth
+      ),
+      buildingMaterial
+    );
 
-      body.castShadow = true;
-      body.receiveShadow = true;
+    body.position.set(
+      0,
+      height / 2,
+      0
+    );
 
-      this.scene.add(body);
+    body.castShadow = true;
+    body.receiveShadow = true;
 
-      // L'edificio diventa anche un ostacolo
-      this.obstacles.push(
-        new THREE.Box3().setFromObject(body)
-      );
+    building.add(body);
 
-      const roof = new THREE.Mesh(
-        new THREE.ConeGeometry(
-          Math.max(width, depth) * 0.72,
-          1.6,
-          4
-        ),
-        roofMaterial
-      );
+    // Tetto
+    const roof = new THREE.Mesh(
+      new THREE.ConeGeometry(
+        Math.max(width, depth) * 0.72,
+        1.6,
+        4
+      ),
+      roofMaterial
+    );
 
-      roof.position.set(x, height + 0.8, z);
-      roof.rotation.y = Math.PI / 4;
-      roof.castShadow = true;
+    roof.position.set(
+      0,
+      height + 0.8,
+      0
+    );
 
-      this.scene.add(roof);
-    };
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
 
-    createBuilding(-7, -7, 7, 4.5, 6);
-    createBuilding(7, -13, 6, 5.5, 7);
-    createBuilding(-8, -22, 8, 4, 6);
-    createBuilding(8, -29, 7, 6, 8);
+    building.add(roof);
+
+    /*
+     * Aggiungiamo prima il gruppo alla scena.
+     */
+    this.scene.add(building);
+
+    /*
+     * Manteniamo le vecchie coordinate X/Z,
+     * ma Planet le converte sulla superficie
+     * della sfera.
+     */
+    this.planet.placeObject(
+      building,
+      x,
+      z,
+      0
+    );
+
+    building.updateWorldMatrix(
+      true,
+      true
+    );
+
+    // Collider temporaneo della casa
+    this.obstacles.push(
+      new THREE.Box3().setFromObject(body)
+    );
+  };
+
+  // Stesse coordinate del vecchio villaggio
+  createBuilding(
+    -7,
+    -7,
+    7,
+    4.5,
+    6
+  );
+
+  createBuilding(
+    7,
+    -13,
+    6,
+    5.5,
+    7
+  );
+
+  createBuilding(
+    -8,
+    -22,
+    8,
+    4,
+    6
+  );
+
+  createBuilding(
+    8,
+    -29,
+    7,
+    6,
+    8
+  );
   }
 
   createTrees() {
-    const trunkMaterial = new THREE.MeshStandardMaterial({
+  const trunkMaterial =
+    new THREE.MeshStandardMaterial({
       color: 0x76543a,
     });
 
-    const crownMaterial = new THREE.MeshStandardMaterial({
+  const crownMaterial =
+    new THREE.MeshStandardMaterial({
       color: 0x357847,
     });
 
-    const positions = [
-      [-13, 2],
-      [13, -4],
-      [-14, -15],
-      [14, -20],
-      [-13, -33],
-      [13, -39],
-    ];
+  const positions = [
+    [-13, 2],
+    [13, -4],
+    [-14, -15],
+    [14, -20],
+    [-13, -33],
+    [13, -39],
+  ];
 
-    for (const [x, z] of positions) {
-      const trunk = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.22, 0.3, 2, 8),
-        trunkMaterial
-      );
+  for (const [x, z] of positions) {
 
-      trunk.position.set(x, 1, z);
-      trunk.castShadow = true;
+    /*
+     * Un albero è un gruppo composto
+     * da tronco + chioma.
+     */
+    const tree = new THREE.Group();
 
-      this.scene.add(trunk);
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(
+        0.22,
+        0.3,
+        2,
+        8
+      ),
+      trunkMaterial
+    );
 
-      const crown = new THREE.Mesh(
-        new THREE.SphereGeometry(1.5, 12, 10),
-        crownMaterial
-      );
+    trunk.position.set(
+      0,
+      1,
+      0
+    );
 
-      crown.position.set(x, 2.7, z);
-      crown.castShadow = true;
+    trunk.castShadow = true;
 
-      this.scene.add(crown);
+    tree.add(trunk);
+
+    const crown = new THREE.Mesh(
+      new THREE.SphereGeometry(
+        1.5,
+        12,
+        10
+      ),
+      crownMaterial
+    );
+
+    crown.position.set(
+      0,
+      2.7,
+      0
+    );
+
+    crown.castShadow = true;
+
+    tree.add(crown);
+
+    this.scene.add(tree);
+
+    /*
+     * Posiziona e inclina automaticamente
+     * l'albero rispetto alla superficie.
+     */
+    this.planet.placeObject(
+      tree,
+      x,
+      z,
+      0
+    );
     }
   }
 
@@ -162,28 +298,38 @@ export class World {
     return this.obstacles;
   }
   
-  createWallBlock(width, height, depth, x, y, z, material) {
-  const geometry = new THREE.BoxGeometry(
-    width,
-    height,
-    depth
-  );
+  createWallBlock(
+  width,
+  height,
+  depth,
+  x,
+  y,
+  z,
+  material,
+  parent = this.scene
+) {
+  const geometry =
+    new THREE.BoxGeometry(
+      width,
+      height,
+      depth
+    );
 
   const block = new THREE.Mesh(
     geometry,
     material
   );
 
-  block.position.set(x, y, z);
+  block.position.set(
+    x,
+    y,
+    z
+  );
+
   block.castShadow = true;
   block.receiveShadow = true;
 
-  this.scene.add(block);
-
-  // Ogni parte della parete blocca il giocatore.
-  this.obstacles.push(
-    new THREE.Box3().setFromObject(block)
-  );
+  parent.add(block);
 
   return block;
 }
@@ -195,16 +341,10 @@ createWallWithDoor() {
       roughness: 0.95,
     });
 
-  const wallZ = 2;
-
   const wallWidth = 10;
   const wallHeight = 4;
   const wallDepth = 0.35;
 
-  /*
-   * Il vano centrale è leggermente più largo
-   * del telaio della porta.
-   */
   const openingWidth = 1.8;
   const openingHeight = 2.7;
 
@@ -215,84 +355,157 @@ createWallWithDoor() {
     wallHeight - openingHeight;
 
   /*
-   * BLOCCO SINISTRO
+   * Tutta la parete diventa un unico gruppo.
    *
-   * Occupa la parte della parete a sinistra
-   * dell'apertura.
+   * L'origine rappresenta il punto centrale
+   * della parete sulla superficie del pianeta.
    */
-  this.createWallBlock(
-    sideWidth,
-    wallHeight,
-    wallDepth,
-    -(openingWidth / 2 + sideWidth / 2),
-    wallHeight / 2,
-    wallZ,
-    wallMaterial
-  );
+  const wallGroup =
+    new THREE.Group();
+
+  this.scene.add(wallGroup);
+
+  // =====================
+  // MURO SINISTRO
+  // =====================
+
+  const leftWall =
+    this.createWallBlock(
+      sideWidth,
+      wallHeight,
+      wallDepth,
+
+      -(
+        openingWidth / 2 +
+        sideWidth / 2
+      ),
+
+      wallHeight / 2,
+      0,
+
+      wallMaterial,
+      wallGroup
+    );
+
+  // =====================
+  // MURO DESTRO
+  // =====================
+
+  const rightWall =
+    this.createWallBlock(
+      sideWidth,
+      wallHeight,
+      wallDepth,
+
+      openingWidth / 2 +
+        sideWidth / 2,
+
+      wallHeight / 2,
+      0,
+
+      wallMaterial,
+      wallGroup
+    );
+
+  // =====================
+  // ARCHITRAVE
+  // =====================
+
+  const upperWall =
+    this.createWallBlock(
+      openingWidth,
+      upperHeight,
+      wallDepth,
+
+      0,
+
+      openingHeight +
+        upperHeight / 2,
+
+      0,
+
+      wallMaterial,
+      wallGroup
+    );
+
+  // =====================
+  // PORTA
+  // =====================
 
   /*
-   * BLOCCO DESTRO
+   * Door può utilizzare wallGroup come
+   * contenitore al posto della scena.
    *
-   * Occupa la parte della parete a destra
-   * dell'apertura.
-   */
-  this.createWallBlock(
-    sideWidth,
-    wallHeight,
-    wallDepth,
-    openingWidth / 2 + sideWidth / 2,
-    wallHeight / 2,
-    wallZ,
-    wallMaterial
-  );
-
-  /*
-   * BLOCCO SUPERIORE
-   *
-   * Chiude la parete sopra la porta,
-   * lasciando libero il passaggio sottostante.
-   */
-  this.createWallBlock(
-    openingWidth,
-    upperHeight,
-    wallDepth,
-    0,
-    openingHeight + upperHeight / 2,
-    wallZ,
-    wallMaterial
-  );
-
-  /*
-   * La posizione del cardine è x = -0.7.
-   * La porta è larga 1.4 unità e quindi
-   * occupa lo spazio tra x = -0.7 e x = 0.7.
+   * Tutte le sue coordinate diventano locali
+   * rispetto alla parete.
    */
   const door = new Door(
-    this.scene,
+    wallGroup,
     {
       x: -0.7,
       y: 0,
-      z: wallZ,
+      z: 0,
     }
   );
 
   this.doors.push(door);
 
   /*
-   * Il collider della porta viene mantenuto
-   * nello stesso array usato dal giocatore.
-   * Door.update() lo aggiorna durante l'apertura.
+   * Vecchia posizione della parete:
+   *
+   * x = 0
+   * z = 2
+   *
+   * Ora viene convertita sulla sfera.
    */
+  this.planet.placeObject(
+    wallGroup,
+    0,
+    2,
+    0
+  );
+
+  /*
+   * Aggiorniamo tutte le matrici mondiali,
+   * perché il gruppo adesso è ruotato.
+   */
+  wallGroup.updateWorldMatrix(
+    true,
+    true
+  );
+
+  // Collider delle parti della parete
+
+  this.obstacles.push(
+    new THREE.Box3().setFromObject(
+      leftWall
+    )
+  );
+
+  this.obstacles.push(
+    new THREE.Box3().setFromObject(
+      rightWall
+    )
+  );
+
+  this.obstacles.push(
+    new THREE.Box3().setFromObject(
+      upperWall
+    )
+  );
+
+  // Collider porta
+  door.updateCollider();
+
   this.obstacles.push(
     door.getCollider()
   );
 
+  // Porta interattiva
   this.interactableMeshes.push(
     door.getMesh()
   );
 }
-
-
 
 update(deltaTime) {
   for (const door of this.doors) {
@@ -304,6 +517,8 @@ getInteractableMeshes() {
   return this.interactableMeshes;
 }
 
-
+getPlanet() {
+  return this.planet;
+}
 
 }

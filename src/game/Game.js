@@ -1,5 +1,4 @@
 import * as THREE from "three";
-
 import { World } from "./World";
 import { Player } from "./Player";
 import { InteractionSystem } from "./InteractionSystem";
@@ -81,23 +80,32 @@ export class Game {
     // PLAYER
     // =====================
 
-    this.snowSystem = new SnowSystem(this.scene, {
-    count: 2500,
-    areaSize: 35,
-    minHeight: 0.2,
-    maxHeight: 18,
-    minFallSpeed: 0.8,
-    maxFallSpeed: 2.0,
-    windX: 0.25,
-    windZ: 0.08,
-    size: 0.09,
-    opacity: 0.85,
-    });
+    this.snowSystem = new SnowSystem(
+      this.scene,
+      this.world.getPlanet(),
+      {
+        count: 2500,
+        areaSize: 18,
+
+        minHeight: 0.3,
+        maxHeight: 14,
+
+        minFallSpeed: 0.8,
+        maxFallSpeed: 2.0,
+
+        windStrength: 0.35,
+        driftStrength: 0.22,
+
+        size: 0.09,
+        opacity: 0.85,
+      }
+    );
     
     this.player = new Player(
       this.camera,
       this.renderer.domElement,
       this.world.getObstacles(),
+      this.world.getPlanet(),
       onLockChange
     );
 

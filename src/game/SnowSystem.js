@@ -1,213 +1,572 @@
 import * as THREE from "three";
 
 export class SnowSystem {
-  constructor(scene, options = {}) {
+  constructor(
+    scene,
+    planet,
+    options = {}
+  ) {
     this.scene = scene;
+    this.planet = planet;
 
-    // Parametri principali
-    this.count = options.count ?? 2500;
-    this.areaSize = options.areaSize ?? 35;
-    this.minHeight = options.minHeight ?? 0.2;
-    this.maxHeight = options.maxHeight ?? 18;
+    // =====================
+    // PARAMETRI
+    // =====================
 
-    // Movimento
-    this.minFallSpeed = options.minFallSpeed ?? 0.8;
-    this.maxFallSpeed = options.maxFallSpeed ?? 2.0;
+    this.count =
+      options.count ?? 2500;
 
-    this.windX = options.windX ?? 0.25;
-    this.windZ = options.windZ ?? 0.08;
+    /*
+     * Raggio della zona di nevicata
+     * intorno al giocatore.
+     */
+    this.areaSize =
+      options.areaSize ?? 18;
+
+    /*
+     * Altezza minima e massima dei fiocchi
+     * rispetto alla superficie del pianeta.
+     */
+    this.minHeight =
+      options.minHeight ?? 0.3;
+
+    this.maxHeight =
+      options.maxHeight ?? 14;
+
+    // Velocità di caduta
+    this.minFallSpeed =
+      options.minFallSpeed ?? 0.8;
+
+    this.maxFallSpeed =
+      options.maxFallSpeed ?? 2.0;
+
+    // Movimento laterale / vento
+    this.windStrength =
+      options.windStrength ?? 0.35;
+
+    this.driftStrength =
+      options.driftStrength ?? 0.22;
 
     // Aspetto
-    this.size = options.size ?? 0.09;
-    this.opacity = options.opacity ?? 0.85;
+    this.size =
+      options.size ?? 0.09;
 
-    // Posizione centrale del sistema
-    this.center = new THREE.Vector3(0, 0, 0);
+    this.opacity =
+      options.opacity ?? 0.85;
 
-    this.positions = new Float32Array(this.count * 3);
-    this.fallSpeeds = new Float32Array(this.count);
-    this.driftOffsets = new Float32Array(this.count);
+    // =====================
+    // DATI PARTICELLE
+    // =====================
+
+    this.positions =
+      new Float32Array(
+        this.count * 3
+      );
+
+    this.fallSpeeds =
+      new Float32Array(
+        this.count
+      );
+
+    this.driftOffsets =
+      new Float32Array(
+        this.count
+      );
+
+    /*
+     * Vettori temporanei.
+     * Li riutilizziamo per evitare di creare
+     * migliaia di Vector3 ogni fotogramma.
+     */
+    this.particlePosition =
+      new THREE.Vector3();
+
+    this.gravityDirection =
+      new THREE.Vector3();
+
+    this.surfaceNormal =
+      new THREE.Vector3();
+
+    this.playerNormal =
+      new THREE.Vector3();
+
+    this.tangentA =
+      new THREE.Vector3();
+
+    this.tangentB =
+      new THREE.Vector3();
+
+    this.offset =
+      new THREE.Vector3();
+
+    this.surfacePoint =
+      new THREE.Vector3();
+
+    this.initialized = false;
 
     this.createSnow();
+
+    this.reference =
+      new THREE.Vector3();
+
   }
 
   createSnow() {
-    const halfArea = this.areaSize / 2;
+    /*
+     * Le particelle vengono inizializzate
+     * temporaneamente vicino al polo.
+     *
+     * Al primo update verranno distribuite
+     * intorno alla posizione del giocatore.
+     */
 
-    // Creiamo le posizioni iniziali
-    for (let i = 0; i < this.count; i++) {
+    const startDirection =
+      new THREE.Vector3(
+        0,
+        1,
+        0
+      );
+
+    for (
+      let i = 0;
+      i < this.count;
+      i++
+    ) {
       const index = i * 3;
 
+      const height =
+        this.minHeight +
+        Math.random() *
+          (
+            this.maxHeight -
+            this.minHeight
+          );
+
+      const position =
+        this.planet.getSurfacePosition(
+          startDirection,
+          height
+        );
+
       this.positions[index] =
-        (Math.random() - 0.5) * this.areaSize;
+        position.x;
 
       this.positions[index + 1] =
-        this.minHeight +
-        Math.random() * (this.maxHeight - this.minHeight);
+        position.y;
 
       this.positions[index + 2] =
-        (Math.random() - 0.5) * this.areaSize;
+        position.z;
 
-      // Ogni fiocco cade a una velocità leggermente diversa
       this.fallSpeeds[i] =
         this.minFallSpeed +
-        Math.random() * (this.maxFallSpeed - this.minFallSpeed);
+        Math.random() *
+          (
+            this.maxFallSpeed -
+            this.minFallSpeed
+          );
 
-      // Offset casuale per il movimento oscillatorio
       this.driftOffsets[i] =
-        Math.random() * Math.PI * 2;
+        Math.random() *
+        Math.PI *
+        2;
     }
 
-    this.geometry = new THREE.BufferGeometry();
+    this.geometry =
+      new THREE.BufferGeometry();
 
     this.geometry.setAttribute(
       "position",
-      new THREE.BufferAttribute(this.positions, 3)
+      new THREE.BufferAttribute(
+        this.positions,
+        3
+      )
     );
 
-    this.material = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: this.size,
-      transparent: true,
-      opacity: this.opacity,
-      depthWrite: false,
-      sizeAttenuation: true,
-    });
+    this.material =
+      new THREE.PointsMaterial({
+        color: 0xffffff,
+        size: this.size,
+        transparent: true,
+        opacity: this.opacity,
+        depthWrite: false,
+        sizeAttenuation: true,
+      });
 
-    this.snow = new THREE.Points(
-      this.geometry,
-      this.material
-    );
+    this.snow =
+      new THREE.Points(
+        this.geometry,
+        this.material
+      );
 
-    /*
-     * Evitiamo che Three.js nasconda accidentalmente
-     * il sistema particellare a causa del frustum culling.
-     */
     this.snow.frustumCulled = false;
 
-    this.scene.add(this.snow);
+    this.scene.add(
+      this.snow
+    );
   }
 
-  update(delta, elapsedTime = 0, playerPosition = null) {
+  /*
+   * Costruisce due assi tangenti alla sfera
+   * nella posizione del giocatore.
+   */
+  calculateTangentBasis(
+    playerPosition
+  ) {
+    this.playerNormal.copy(
+      this.planet.getSurfaceNormal(
+        playerPosition
+      )
+    );
+
     /*
-     * Se viene fornita la posizione del giocatore,
-     * la zona di neve può seguirlo.
-     *
-     * In questo modo in futuro potremo avere
-     * un mondo molto più grande senza dover riempire
-     * tutta la mappa di particelle.
+     * Scegliamo un asse di riferimento
+     * che non sia parallelo alla normale.
      */
-    if (playerPosition) {
-      this.center.x = playerPosition.x;
-      this.center.z = playerPosition.z;
+    
+    if (
+      Math.abs(
+        this.playerNormal.y
+      ) < 0.9
+    ) {
+      this.reference.set(
+        0,
+        1,
+        0
+      );
+    } else {
+      this.reference.set(
+        1,
+        0,
+        0
+      );
     }
 
-    const halfArea = this.areaSize / 2;
+    this.tangentA
+      .crossVectors(
+        this.reference,
+        this.playerNormal
+      )
+      .normalize();
 
-    for (let i = 0; i < this.count; i++) {
-      const index = i * 3;
+    this.tangentB
+      .crossVectors(
+        this.playerNormal,
+        this.tangentA
+      )
+      .normalize();
+  }
 
-      let x = this.positions[index];
-      let y = this.positions[index + 1];
-      let z = this.positions[index + 2];
+  /*
+   * Riposiziona un fiocco sopra la zona
+   * in cui si trova il giocatore.
+   */
+  resetParticle(
+    index,
+    playerPosition
+  ) {
+    this.calculateTangentBasis(
+      playerPosition
+    );
 
-      // Caduta verticale
-      y -= this.fallSpeeds[i] * delta;
+    /*
+     * Punto della superficie direttamente
+     * sotto il giocatore.
+     */
+    this.surfacePoint.copy(
+      this.planet.projectToSurface(
+        playerPosition,
+        0
+      )
+    );
 
-      // Vento
-      x += this.windX * delta;
-      z += this.windZ * delta;
+    /*
+     * Distribuzione casuale sul piano
+     * tangente locale.
+     */
+    
+    const offsetA =
+      (
+        Math.random() - 0.5
+      ) * this.areaSize;
+
+    const offsetB =
+      (
+        Math.random() - 0.5
+      ) * this.areaSize;
+
+    this.offset
+      .copy(this.tangentA)
+      .multiplyScalar(offsetA)
+      .addScaledVector(
+        this.tangentB,
+        offsetB
+      );
+
+    /*
+     * Partiamo dal punto centrale
+     * e aggiungiamo l'offset laterale.
+     */
+    this.particlePosition
+      .copy(this.surfacePoint)
+      .add(this.offset);
+
+    /*
+     * Riproiettiamo sulla superficie:
+     * questo fa seguire la curvatura
+     * del pianeta.
+     */
+    this.particlePosition.copy(
+      this.planet.projectToSurface(
+        this.particlePosition,
+        0
+      )
+    );
+
+    /*
+     * Normale esatta del punto.
+     */
+    this.surfaceNormal.copy(
+      this.planet.getSurfaceNormal(
+        this.particlePosition
+      )
+    );
+
+    const height =
+      this.minHeight +
+      Math.random() *
+        (
+          this.maxHeight -
+          this.minHeight
+        );
+
+    /*
+     * Solleviamo il fiocco radialmente
+     * sopra la superficie.
+     */
+    this.particlePosition.addScaledVector(
+      this.surfaceNormal,
+      height
+    );
+
+    const arrayIndex =
+      index * 3;
+
+    this.positions[arrayIndex] =
+      this.particlePosition.x;
+
+    this.positions[arrayIndex + 1] =
+      this.particlePosition.y;
+
+    this.positions[arrayIndex + 2] =
+      this.particlePosition.z;
+
+    /*
+     * Nuova velocità casuale.
+     */
+    this.fallSpeeds[index] =
+      this.minFallSpeed +
+      Math.random() *
+        (
+          this.maxFallSpeed -
+          this.minFallSpeed
+        );
+  }
+
+  update(
+    delta,
+    elapsedTime = 0,
+    playerPosition = null
+  ) {
+    if (!playerPosition) {
+      return;
+    }
+
+    if (!this.initialized) {
+      for (let i = 0; i < this.count; i++) {
+        this.resetParticle(
+          i,
+          playerPosition
+        );
+      }
+
+      this.initialized = true;
+    }
+
+    this.calculateTangentBasis(
+      playerPosition
+    );
+
+    const planetCenter =
+      this.planet.getCenter();
+
+    const planetRadius =
+      this.planet.getRadius();
+
+    for (
+      let i = 0;
+      i < this.count;
+      i++
+    ) {
+      const index =
+        i * 3;
+
+      this.particlePosition.set(
+        this.positions[index],
+        this.positions[index + 1],
+        this.positions[index + 2]
+      );
 
       /*
-       * Piccola oscillazione laterale.
-       * Impedisce alla neve di sembrare una
-       * semplice "pioggia bianca".
+       * ============================
+       * GRAVITÀ RADIALE
+       * ============================
+       *
+       * Il fiocco non scende più verso -Y.
+       * Punta sempre verso il centro
+       * del pianeta.
        */
-      x +=
+      this.gravityDirection
+        .copy(planetCenter)
+        .sub(
+          this.particlePosition
+        )
+        .normalize();
+
+      this.particlePosition
+        .addScaledVector(
+          this.gravityDirection,
+          this.fallSpeeds[i] *
+            delta
+        );
+
+      /*
+       * ============================
+       * VENTO
+       * ============================
+       *
+       * Il vento segue il piano tangente
+       * locale invece degli assi X/Z
+       * assoluti.
+       */
+      this.particlePosition
+        .addScaledVector(
+          this.tangentA,
+          this.windStrength *
+            delta
+        );
+
+      /*
+       * Oscillazione laterale
+       * individuale.
+       */
+      const drift =
         Math.sin(
-          elapsedTime * 1.5 + this.driftOffsets[i]
+          elapsedTime * 1.5 +
+          this.driftOffsets[i]
         ) *
-        0.12 *
+        this.driftStrength *
         delta;
 
-      /*
-       * Quando il fiocco raggiunge il terreno
-       * viene riportato in alto.
-       */
-      if (y < this.minHeight) {
-        y = this.maxHeight;
-
-        x =
-          this.center.x +
-          (Math.random() - 0.5) * this.areaSize;
-
-        z =
-          this.center.z +
-          (Math.random() - 0.5) * this.areaSize;
-
-        // La velocità cambia leggermente
-        // ad ogni nuova caduta.
-        this.fallSpeeds[i] =
-          this.minFallSpeed +
-          Math.random() *
-            (this.maxFallSpeed - this.minFallSpeed);
-      }
+      this.particlePosition
+        .addScaledVector(
+          this.tangentB,
+          drift
+        );
 
       /*
-       * Se il vento porta il fiocco fuori dalla zona,
-       * lo facciamo rientrare dal lato opposto.
+       * Distanza dal centro del pianeta.
        */
-      if (x > this.center.x + halfArea) {
-        x = this.center.x - halfArea;
+      const distanceFromCenter =
+        this.particlePosition.distanceTo(
+          planetCenter
+        );
+
+      const heightAboveSurface =
+        distanceFromCenter -
+        planetRadius;
+
+      /*
+       * Il fiocco ha raggiunto il terreno:
+       * viene rigenerato sopra il giocatore.
+       */
+      if (
+        heightAboveSurface <=
+        this.minHeight
+      ) {
+        this.resetParticle(
+          i,
+          playerPosition
+        );
+
+        continue;
       }
 
-      if (x < this.center.x - halfArea) {
-        x = this.center.x + halfArea;
+      /*
+       * Se il giocatore si è spostato molto,
+       * evitiamo di lasciare particelle
+       * dall'altra parte del pianeta.
+       */
+      const particleNormal =
+        this.planet.getSurfaceNormal(
+          this.particlePosition
+        );
+
+      const alignment =
+        particleNormal.dot(
+          this.playerNormal
+        );
+
+      /*
+       * Se la particella è troppo lontana
+       * dalla zona del giocatore la
+       * ricicliamo.
+       */
+      if (alignment < 0.82) {
+        this.resetParticle(
+          i,
+          playerPosition
+        );
+
+        continue;
       }
 
-      if (z > this.center.z + halfArea) {
-        z = this.center.z - halfArea;
-      }
+      this.positions[index] =
+        this.particlePosition.x;
 
-      if (z < this.center.z - halfArea) {
-        z = this.center.z + halfArea;
-      }
+      this.positions[index + 1] =
+        this.particlePosition.y;
 
-      this.positions[index] = x;
-      this.positions[index + 1] = y;
-      this.positions[index + 2] = z;
+      this.positions[index + 2] =
+        this.particlePosition.z;
     }
 
-    // Comunichiamo a Three.js che le posizioni
-    // delle particelle sono cambiate.
-    this.geometry.attributes.position.needsUpdate = true;
-  }
-
-  setWind(x, z) {
-    this.windX = x;
-    this.windZ = z;
+    this.geometry
+      .attributes
+      .position
+      .needsUpdate = true;
   }
 
   setOpacity(value) {
-    this.opacity = THREE.MathUtils.clamp(
-      value,
-      0,
-      1
-    );
+    this.opacity =
+      THREE.MathUtils.clamp(
+        value,
+        0,
+        1
+      );
 
-    this.material.opacity = this.opacity;
+    this.material.opacity =
+      this.opacity;
   }
 
   setVisible(visible) {
-    this.snow.visible = visible;
+    this.snow.visible =
+      visible;
   }
 
   dispose() {
-    /*
-     * Utile se in futuro vorremo cambiare livello,
-     * disattivare completamente la neve ecc.
-     */
-    this.scene.remove(this.snow);
+    this.scene.remove(
+      this.snow
+    );
 
     this.geometry.dispose();
     this.material.dispose();
