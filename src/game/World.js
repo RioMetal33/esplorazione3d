@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import houseUrl from "../assets/Casa.glb?url";
 import { Door } from "./Door";
 import { Planet } from "./Planet.js";
 
@@ -104,6 +106,9 @@ export class World {
   this.interactableMeshes = [];
   this.doors = [];
 
+  // Loader dei modelli GLB
+  this.gltfLoader = new GLTFLoader();
+
   // Pianeta
   this.planet = new Planet(
     this.scene,
@@ -173,6 +178,90 @@ export class World {
 
     this.scene.add(path);
   }
+
+createModelHouse(x, z) {
+  this.gltfLoader.load(
+    houseUrl,
+
+    (gltf) => {
+      const house = gltf.scene;
+
+      /*
+       * Contenitore della casa.
+       * L'origine del gruppo rappresenta
+       * il punto di appoggio sul pianeta.
+       */
+      const houseGroup = new THREE.Group();
+
+      houseGroup.add(house);
+      this.scene.add(houseGroup);
+
+      /*
+       * Abilita le ombre su tutte le mesh
+       * contenute nel modello GLB.
+       */
+      house.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      /*
+       * Prima prova di scala.
+       * La regoleremo dopo aver visto
+       * le dimensioni effettive del modello.
+       */
+      house.scale.setScalar(0.18);
+
+      /*
+       * Calcola il bounding box del modello.
+       */
+      house.updateMatrixWorld(true);
+
+      const box = new THREE.Box3()
+        .setFromObject(house);
+
+      /*
+       * Porta la base del modello a y = 0.
+       * È importante perché non sappiamo
+       * dove sia stata impostata l'origine
+       * nel file Casa.glb.
+       */
+      house.position.y -= box.min.y;
+
+      /*
+       * Posiziona e orienta il gruppo
+       * sulla superficie della sfera.
+       */
+      this.planet.placeObject(
+        houseGroup,
+        x,
+        z,
+        0
+      );
+
+      houseGroup.updateWorldMatrix(
+        true,
+        true
+      );
+
+      console.log(
+        "Casa.glb caricata",
+        house
+      );
+    },
+
+    undefined,
+
+    (error) => {
+      console.error(
+        "Errore nel caricamento di Casa.glb:",
+        error
+      );
+    }
+  );
+}
 
   createBuildings() {
   const buildingMaterial =
@@ -279,12 +368,10 @@ export class World {
   };
 
   // Stesse coordinate del vecchio villaggio
-  createBuilding(
+  
+  this.createModelHouse(
     -7,
-    -7,
-    7,
-    4.5,
-    6
+    -7
   );
 
   createBuilding(
