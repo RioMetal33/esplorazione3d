@@ -2,6 +2,100 @@ import * as THREE from "three";
 import { Door } from "./Door";
 import { Planet } from "./Planet.js";
 
+class OrientedBoxCollider {
+  constructor(mesh) {
+    this.mesh = mesh;
+
+    if (!this.mesh.geometry.boundingBox) {
+      this.mesh.geometry.computeBoundingBox();
+    }
+
+    this.localBox =
+      this.mesh.geometry.boundingBox.clone();
+
+    this.inverseWorldMatrix =
+      new THREE.Matrix4();
+
+    this.localSphereCenter =
+      new THREE.Vector3();
+
+    this.closestPoint =
+      new THREE.Vector3();
+
+    this.worldScale =
+      new THREE.Vector3(1, 1, 1);
+  }
+
+  intersectsSphere(sphere) {
+    /*
+     * Aggiorna la trasformazione completa del mesh,
+     * comprese posizione e rotazione del gruppo casa.
+     */
+    this.mesh.updateWorldMatrix(true, false);
+
+    /*
+     * Trasforma il centro della sfera del giocatore
+     * dallo spazio globale allo spazio locale
+     * dell'edificio.
+     */
+    this.inverseWorldMatrix
+      .copy(this.mesh.matrixWorld)
+      .invert();
+
+    this.localSphereCenter
+      .copy(sphere.center)
+      .applyMatrix4(this.inverseWorldMatrix);
+
+    /*
+     * Nel progetto attuale le case non sono scalate,
+     * ma teniamo conto anche di un'eventuale scala
+     * futura del mesh.
+     */
+    this.mesh.getWorldScale(this.worldScale);
+
+    const minimumScale = Math.max(
+      Math.min(
+        Math.abs(this.worldScale.x),
+        Math.abs(this.worldScale.y),
+        Math.abs(this.worldScale.z)
+      ),
+      0.000001
+    );
+
+    const localRadius =
+      sphere.radius / minimumScale;
+
+    /*
+     * Trova il punto del box locale più vicino
+     * al centro del giocatore.
+     */
+    this.closestPoint.set(
+      THREE.MathUtils.clamp(
+        this.localSphereCenter.x,
+        this.localBox.min.x,
+        this.localBox.max.x
+      ),
+      THREE.MathUtils.clamp(
+        this.localSphereCenter.y,
+        this.localBox.min.y,
+        this.localBox.max.y
+      ),
+      THREE.MathUtils.clamp(
+        this.localSphereCenter.z,
+        this.localBox.min.z,
+        this.localBox.max.z
+      )
+    );
+
+    return (
+      this.closestPoint.distanceToSquared(
+        this.localSphereCenter
+      ) <=
+      localRadius * localRadius
+    );
+  }
+}
+
 export class World {
   constructor(scene) {
   this.scene = scene;
@@ -172,9 +266,15 @@ export class World {
       true
     );
 
-    // Collider temporaneo della casa
+    /*
+    * Collider orientato della casa.
+    *
+    * Il controllo viene eseguito nello spazio locale
+    * del corpo dell'edificio, quindi il collider segue
+    * correttamente l'inclinazione della casa sulla sfera.
+    */
     this.obstacles.push(
-      new THREE.Box3().setFromObject(body)
+      new OrientedBoxCollider(body)
     );
   };
 
